@@ -1,0 +1,82 @@
+# Stream Relay Go - 极简配置
+
+server:
+  port: 8080
+  timeout: 300s  # 单个请求最长 5 分钟
+  max_body_size: 10485760  # 10MB
+
+# 路由配置 - 只需要知道往哪转发
+routes:
+  - name: siliconflow
+    path: /v1/chat/completions
+    upstream: https://api.siliconflow.cn
+    auth_header: Authorization
+    auth_env: SILICONFLOW_API_KEY
+    kind: sse
+
+  - name: openai
+    path: /openai/v1/chat/completions
+    upstream: https://api.openai.com
+    auth_header: Authorization
+    auth_env: OPENAI_API_KEY
+    kind: sse
+
+  - name: anthropic
+    path: /v1/messages
+    upstream: https://api.anthropic.com
+    auth_header: x-api-key
+    auth_env: ANTHROPIC_API_KEY
+    kind: sse
+
+  - name: azure-tts
+    path: /cognitiveservices/v1
+    upstream: https://eastus.tts.speech.microsoft.com
+    auth_header: Ocp-Apim-Subscription-Key
+    auth_env: AZURE_SPEECH_KEY
+    kind: raw
+
+# 存储配置（暂时禁用，专注核心转发功能）
+storage:
+  # Redis - 用于实时查询（可选）
+  redis:
+    addr: localhost:6379
+    password: ""
+    db: 0
+    ttl: 3600  # 1 hour
+
+  # ClickHouse - 用于持久化和分析（暂时禁用）
+  clickhouse:
+    addr: localhost:9000
+    database: relay
+    username: default
+    password: ""  # 生产环境请使用环境变量
+    async: false
+
+# 限流配置
+rate_limit:
+  enabled: true
+  default: 100  # 每租户每分钟 100 请求
+  burst: 20
+
+# 观测配置
+observability:
+  # Prometheus
+  prometheus:
+    enabled: true
+    path: /metrics
+
+  # 日志
+  logging:
+    level: info  # debug | info | warn | error
+    format: json  # json | text
+    # 不需要单独的会话日志，全部存 ClickHouse
+
+  # 详细日志（调试用）
+  detailed_logs: false  # 生产环境关闭
+
+# 鉴权配置
+auth:
+  # Relay 自己的 API Key（客户端访问 relay 时用）
+  api_keys:
+    - sk-relay-test-key-123
+    - sk-relay-prod-key-456
