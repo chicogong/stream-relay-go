@@ -7,11 +7,11 @@ import (
 
 // Metrics Prometheus 指标 - 只保留核心的 5 个
 type Metrics struct {
-	requestsTotal      *prometheus.CounterVec
-	durationMs         *prometheus.HistogramVec
-	errorsTotal        *prometheus.CounterVec
-	activeConnections  *prometheus.GaugeVec
-	storageWriteMs     prometheus.Histogram
+	requestsTotal     *prometheus.CounterVec
+	durationMs        *prometheus.HistogramVec
+	errorsTotal       *prometheus.CounterVec
+	activeConnections *prometheus.GaugeVec
+	storageWriteMs    prometheus.Histogram
 }
 
 // NewMetrics 创建指标

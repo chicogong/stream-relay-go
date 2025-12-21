@@ -7,8 +7,10 @@ global:
 scrape_configs:
   - job_name: 'relay'
     static_configs:
-      - targets: ['192.168.1.3:8080']
+      - targets: ['host.docker.internal:8080']
         labels:
           service: 'stream-relay-go'
     metrics_path: '/metrics'
     scrape_interval: 5s
+    # Note: Replace 'host.docker.internal' with your actual host IP if needed
+    # For example: 192.168.1.x:8080

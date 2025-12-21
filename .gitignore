@@ -33,6 +33,25 @@ vendor/
 
 # Logs
 *.log
+logs/
 
 # Claude Code
 .claude/
+
+# Docker volumes
+deployments/*/data/
+*_data/
+
+# Coverage
+coverage.txt
+coverage.html
+*.cover
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Grafana
+deployments/grafana/grafana_data/
+deployments/grafana/prometheus_data/

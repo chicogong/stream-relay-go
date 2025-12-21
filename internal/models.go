@@ -5,9 +5,9 @@ import "time"
 // StreamLog 流式请求日志 - 存储到 ClickHouse 的完整记录
 type StreamLog struct {
 	// 基础信息
-	RequestID  string    `json:"request_id"`
-	TenantID   string    `json:"tenant_id"`
-	CreatedAt  time.Time `json:"created_at"`
+	RequestID string    `json:"request_id"`
+	TenantID  string    `json:"tenant_id"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// 路由信息
 	Route    string `json:"route"`
@@ -23,12 +23,12 @@ type StreamLog struct {
 	ResponseChunks []string `json:"response_chunks"` // 完整的 SSE events 或 binary chunks
 
 	// 元数据（边转边收集）
-	DurationMs int64  `json:"duration_ms"`
-	TTFTMs     *int64 `json:"ttft_ms,omitempty"`     // Time To First Token (LLM)
-	TTFAMs     *int64 `json:"ttfa_ms,omitempty"`     // Time To First Audio (TTS)
-	BytesIn    int64  `json:"bytes_in"`
-	BytesOut   int64  `json:"bytes_out"`
-	ChunksCount int   `json:"chunks_count"`
+	DurationMs  int64  `json:"duration_ms"`
+	TTFTMs      *int64 `json:"ttft_ms,omitempty"` // Time To First Token (LLM)
+	TTFAMs      *int64 `json:"ttfa_ms,omitempty"` // Time To First Audio (TTS)
+	BytesIn     int64  `json:"bytes_in"`
+	BytesOut    int64  `json:"bytes_out"`
+	ChunksCount int    `json:"chunks_count"`
 
 	// Token（从响应提取，失败则为 null）
 	TokensIn  *int64 `json:"tokens_in,omitempty"`

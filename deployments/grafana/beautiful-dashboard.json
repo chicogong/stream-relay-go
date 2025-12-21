@@ -1,0 +1,458 @@
+{
+  "dashboard": {
+    "title": "🚀 Stream Relay Go - Real-time Monitoring",
+    "description": "Beautiful real-time monitoring dashboard for Stream Relay Go",
+    "tags": ["relay", "streaming", "llm", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 0,
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "📊 Total Requests",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(relay_requests_total)",
+            "refId": "A",
+            "instant": true,
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "none"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "blue", "value": null},
+                {"color": "green", "value": 10},
+                {"color": "yellow", "value": 100},
+                {"color": "orange", "value": 1000}
+              ]
+            },
+            "unit": "short",
+            "displayName": "Total Requests"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "✅ Success Rate",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(relay_requests_total{status=\"2xx\"}) / sum(relay_requests_total) * 100 or vector(100)",
+            "refId": "A",
+            "instant": true,
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "orientation": "auto",
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "orange", "value": 90},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            },
+            "displayName": "Success Rate"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "📈 Request Rate (per minute)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(relay_requests_total[1m])) * 60",
+            "refId": "A",
+            "legendFormat": "Requests/min",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "top",
+            "calcs": ["mean", "max"]
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "opacity",
+              "spanNulls": false,
+              "insertNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              },
+              "axisPlacement": "auto",
+              "axisLabel": "",
+              "axisColorMode": "text",
+              "axisBorderShow": false,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "axisCenteredZero": false,
+              "hideFrom": {
+                "tooltip": false,
+                "viz": false,
+                "legend": false
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "reqpm",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "⏱️ Average Response Time",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(relay_duration_ms_sum[5m])) / sum(rate(relay_duration_ms_count[5m]))",
+            "refId": "A",
+            "instant": true,
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 500},
+                {"color": "orange", "value": 1000},
+                {"color": "red", "value": 3000}
+              ]
+            },
+            "unit": "ms",
+            "displayName": "Avg Response Time"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "📊 Response Time Distribution (Percentiles)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(relay_duration_ms_bucket[1m])) by (le))",
+            "refId": "A",
+            "legendFormat": "p50 (median)",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(relay_duration_ms_bucket[1m])) by (le))",
+            "refId": "B",
+            "legendFormat": "p95",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(relay_duration_ms_bucket[1m])) by (le))",
+            "refId": "C",
+            "legendFormat": "p99",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "right",
+            "calcs": ["mean", "max"]
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "opacity",
+              "showPoints": "auto",
+              "pointSize": 4,
+              "stacking": {
+                "mode": "none"
+              },
+              "axisPlacement": "auto",
+              "axisCenteredZero": false
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "🔥 Request Heatmap",
+        "type": "heatmap",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(increase(relay_duration_ms_bucket[1m])) by (le)",
+            "refId": "A",
+            "format": "heatmap",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "calculate": false,
+          "yAxis": {
+            "unit": "ms",
+            "reverse": false,
+            "decimals": 0
+          },
+          "cellGap": 1,
+          "color": {
+            "scheme": "Spectral",
+            "fill": "dark-orange",
+            "reverse": false,
+            "exponent": 0.5,
+            "steps": 64
+          },
+          "exemplars": {
+            "color": "rgba(255,0,255,0.7)"
+          },
+          "tooltip": {
+            "show": true,
+            "yHistogram": true
+          },
+          "legend": {
+            "show": true
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "scaleDistribution": {
+                "type": "linear"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "🚨 Error Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(rate(relay_requests_total{status!=\"2xx\"}[1m])) * 60",
+            "refId": "A",
+            "legendFormat": "Errors/min",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "top"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "bars",
+              "lineWidth": 1,
+              "fillOpacity": 50,
+              "gradientMode": "hue",
+              "showPoints": "never"
+            },
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "red"
+            },
+            "unit": "reqpm",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "📋 Recent Activity",
+        "type": "table",
+        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "relay_requests_total",
+            "refId": "A",
+            "instant": true,
+            "format": "table",
+            "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Value",
+              "desc": true
+            }
+          ]
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "inspect": false
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "route"},
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Route"
+                },
+                {
+                  "id": "custom.width",
+                  "value": 150
+                }
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "status"},
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Status"
+                },
+                {
+                  "id": "custom.width",
+                  "value": 100
+                }
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "Value"},
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Count"
+                },
+                {
+                  "id": "custom.width",
+                  "value": 100
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

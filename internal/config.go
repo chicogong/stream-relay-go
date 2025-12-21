@@ -11,12 +11,12 @@ import (
 
 // Config 配置结构 - 极简版
 type Config struct {
-	Server        ServerConfig         `yaml:"server"`
-	Routes        []RouteConfig        `yaml:"routes"`
-	Storage       StorageConfig        `yaml:"storage"`
-	RateLimit     RateLimitConfig      `yaml:"rate_limit"`
-	Observability ObservabilityConfig  `yaml:"observability"`
-	Auth          AuthConfig           `yaml:"auth"`
+	Server        ServerConfig        `yaml:"server"`
+	Routes        []RouteConfig       `yaml:"routes"`
+	Storage       StorageConfig       `yaml:"storage"`
+	RateLimit     RateLimitConfig     `yaml:"rate_limit"`
+	Observability ObservabilityConfig `yaml:"observability"`
+	Auth          AuthConfig          `yaml:"auth"`
 }
 
 type ServerConfig struct {
@@ -30,8 +30,8 @@ type RouteConfig struct {
 	Path       string `yaml:"path"`
 	Upstream   string `yaml:"upstream"`
 	AuthHeader string `yaml:"auth_header"`
-	AuthEnv    string `yaml:"auth_env"`  // 从环境变量读取
-	Kind       string `yaml:"kind"`      // sse | raw
+	AuthEnv    string `yaml:"auth_env"` // 从环境变量读取
+	Kind       string `yaml:"kind"`     // sse | raw
 }
 
 type StorageConfig struct {
@@ -56,7 +56,7 @@ type ClickHouseConfig struct {
 
 type RateLimitConfig struct {
 	Enabled bool `yaml:"enabled"`
-	Default int  `yaml:"default"`  // requests per minute
+	Default int  `yaml:"default"` // requests per minute
 	Burst   int  `yaml:"burst"`
 }
 

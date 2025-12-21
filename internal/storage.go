@@ -10,8 +10,8 @@ import (
 
 // Storage 存储层 - Redis + ClickHouse
 type Storage struct {
-	redis *redis.Client
-	ch    clickhouse.Conn
+	redis  *redis.Client
+	ch     clickhouse.Conn
 	config *StorageConfig
 }
 

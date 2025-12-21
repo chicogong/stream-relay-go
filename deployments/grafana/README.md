@@ -4,14 +4,25 @@ Complete monitoring setup for Stream Relay Go using Prometheus + Grafana.
 
 ## Quick Start
 
-### 1. Start Monitoring Stack
+### 1. Configure Prometheus Target
+
+Edit `prometheus.yml` and replace `host.docker.internal` with your actual host IP:
+
+```yaml
+scrape_configs:
+  - job_name: 'relay'
+    static_configs:
+      - targets: ['YOUR_HOST_IP:8080']  # e.g., 192.168.1.100:8080
+```
+
+### 2. Start Monitoring Stack
 
 ```bash
 cd deployments/grafana
 docker-compose up -d
 ```
 
-### 2. Access Grafana
+### 3. Access Grafana
 
 Open http://localhost:3000
 
@@ -19,9 +30,18 @@ Open http://localhost:3000
 - Username: `admin`
 - Password: `admin`
 
-### 3. View Dashboard
+### 4. Import Dashboard
 
-The "Stream Relay Go - Monitoring Dashboard" will be auto-provisioned and available immediately.
+The beautiful dashboard JSON is available in `beautiful-dashboard.json`.
+
+**Option A: Auto-import (if provisioning works)**
+Dashboard should appear automatically after startup.
+
+**Option B: Manual import**
+1. Go to Dashboards → Import
+2. Upload `beautiful-dashboard.json`
+3. Select "Prometheus" datasource
+4. Click Import
 
 ## Dashboard Panels
 
