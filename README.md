@@ -6,6 +6,12 @@
 
 A lightweight, high-performance streaming relay for LLM and TTS APIs with built-in observability.
 
+## 🎬 Demo
+
+![Streaming Demo](docs/images/streaming-demo.gif)
+
+*Real-time token-by-token streaming with sub-100ms latency*
+
 ## ✨ Features
 
 - **🚀 Low-latency Streaming** - Token-by-token SSE streaming with immediate flush
@@ -108,13 +114,38 @@ docker-compose up -d
 - **Prometheus**: http://localhost:9090
 - **Metrics Endpoint**: http://localhost:8080/metrics
 
-The Grafana dashboard includes:
-- 📊 Total Requests
-- ✅ Success Rate Gauge
-- 📈 Request Rate Chart
-- ⏱️ Response Time Distribution (p50/p95/p99)
-- 🔥 Response Time Heatmap
-- 🚨 Error Rate Monitoring
+### Beautiful Dashboard
+
+![Grafana Dashboard](docs/images/grafana-dashboard.png)
+
+The dashboard provides real-time insights:
+- 📊 **Total Requests** - Cumulative request count
+- ✅ **Success Rate** - Real-time success percentage (color-coded: 🟢 >99%, 🟡 >95%, 🟠 >90%, 🔴 <90%)
+- 📈 **Request Rate** - Requests per minute with smooth curves
+- ⏱️ **Response Time** - p50/p95/p99 latency percentiles
+- 🔥 **Heatmap** - Visual latency distribution
+- 🚨 **Error Monitoring** - Instant error detection with alerts
+
+### Generate Demo Traffic
+
+```bash
+# Run the test script to generate sample requests
+./test_relay.sh
+
+# Or manually send requests
+for i in {1..10}; do
+  curl -N http://localhost:8080/v1/chat/completions \
+    -H 'Authorization: Bearer sk-relay-test-key-123' \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\": \"Qwen/Qwen2.5-7B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Count to $i\"}], \"stream\": true, \"max_tokens\": 20}"
+done
+```
+
+Watch the metrics update in real-time at http://localhost:3000
+
+> 💡 **Tip**: Use `./scripts/generate-demo.sh` to populate the dashboard with demo traffic!
+>
+> 📸 For creating your own screenshots and demos, see [docs/DEMO.md](docs/DEMO.md)
 
 ## 📁 Project Structure
 
