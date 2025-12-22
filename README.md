@@ -4,6 +4,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+English | [简体中文](README_zh.md)
+
 A lightweight, high-performance streaming relay for LLM and TTS APIs with built-in observability.
 
 ## 🎬 Demo
@@ -226,13 +228,54 @@ storage:
 
 ## 📈 Metrics
 
-The relay exposes the following Prometheus metrics:
+The relay exposes comprehensive Prometheus metrics at `/metrics` endpoint:
 
-- `relay_requests_total` - Total number of requests
-- `relay_duration_ms` - Request duration histogram
-- `relay_errors_total` - Total number of errors
-- `relay_active_connections` - Current active connections
-- `relay_storage_write_ms` - Storage write latency
+### Core Metrics
+
+| Metric Name | Type | Description | Labels |
+|-------------|------|-------------|--------|
+| `relay_requests_total` | Counter | Total number of requests processed | `route`, `status` (2xx/4xx/5xx) |
+| `relay_duration_ms` | Histogram | Request duration in milliseconds | `route` |
+| `relay_errors_total` | Counter | Total number of errors | `route`, `type` |
+| `relay_active_connections` | Gauge | Current number of active connections | `route` |
+| `relay_storage_write_ms` | Histogram | Storage write latency in milliseconds | - |
+
+### Histogram Buckets
+
+- **Duration Buckets**: 100ms, 500ms, 1s, 2s, 5s, 10s, 30s, 60s
+- **Storage Write Buckets**: 1ms, 5ms, 10ms, 50ms, 100ms, 500ms, 1s
+
+### Example Queries
+
+```promql
+# Request rate (requests per minute)
+rate(relay_requests_total[1m]) * 60
+
+# Average latency
+rate(relay_duration_ms_sum[1m]) / rate(relay_duration_ms_count[1m])
+
+# P95 latency
+histogram_quantile(0.95, rate(relay_duration_ms_bucket[1m]))
+
+# Success rate
+sum(relay_requests_total{status="2xx"}) / sum(relay_requests_total) * 100
+
+# Error rate
+rate(relay_errors_total[1m])
+
+# Active connections by route
+relay_active_connections
+```
+
+### Grafana Dashboard
+
+Import `deployments/grafana/beautiful-dashboard.json` for a pre-configured dashboard with:
+- Real-time request rate
+- Latency percentiles (p50, p95, p99)
+- Success rate gauge
+- Error monitoring
+- Request heatmap
+- Recent activity table
 
 ## 🤝 Contributing
 
