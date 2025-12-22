@@ -169,3 +169,132 @@ The dashboard configuration is in `dashboard.json` and can be:
 ## Metrics Reference
 
 See [../../docs/METRICS.md](../../docs/METRICS.md) for complete metrics documentation.
+
+## Enhanced Dashboard with Logs
+
+We now provide an **enhanced dashboard** (`enhanced-dashboard.json`) with additional features:
+
+### New Panels (Total: 15 panels)
+
+1. **📊 Total Requests** - Instant counter
+2. **✅ Success Rate** - Color-coded gauge (0-100%)
+3. **⏱️ Avg Response Time** - Mean latency with thresholds
+4. **🔗 Active Connections** - Real-time connection count
+5. **🚨 Error Count** - Total errors with color thresholds
+6. **💾 Storage Write Latency** - Database performance
+7. **📈 Request Rate Trend** - Time series graph
+8. **⏱️ Response Time Percentiles** - p50/p95/p99 lines
+9. **🎯 Requests by Route** - Donut chart distribution
+10. **📊 Status Code Distribution** - Bar gauge (2xx/4xx/5xx)
+11. **🚨 Error Types** - Table breakdown by route and type
+12. **🔗 Active Connections Over Time** - Stacked area chart
+13. **🔥 Request Heatmap** - Latency distribution visualization
+14. **📋 Recent Activity Log** - Metrics summary table
+15. **📝 Application Logs** - Live log streaming (Loki)
+
+### Log Collection (Loki + Promtail)
+
+The enhanced setup includes log aggregation:
+
+#### Services
+
+- **Loki** (`:3100`) - Log storage and query engine
+- **Promtail** - Log collector and shipper
+- **Grafana** - Unified metrics + logs view
+
+#### Log Sources
+
+Promtail collects logs from:
+1. **Application logs**: `../../logs/*.log`
+2. **System logs**: `/var/log/*.log` (optional)
+
+#### Viewing Logs in Grafana
+
+1. Navigate to **Explore** tab
+2. Select **Loki** datasource
+3. Use LogQL queries:
+   ```logql
+   {job="relay-logs"}
+   {job="relay-logs"} |= "error"
+   {job="relay-logs"} | json | level="ERROR"
+   ```
+
+#### Log Retention
+
+- Default: 7 days (168 hours)
+- Configure in `loki-config.yml`:
+  ```yaml
+  limits_config:
+    retention_period: 168h  # Adjust as needed
+  ```
+
+### Setting Up Logs
+
+1. **Create logs directory** (if not exists):
+   ```bash
+   mkdir -p ../../logs
+   ```
+
+2. **Configure relay to write logs**:
+   Update your relay to write JSON-formatted logs:
+   ```go
+   log.SetOutput(logFile)
+   log.SetFormatter(&log.JSONFormatter{})
+   ```
+
+3. **Restart monitoring stack**:
+   ```bash
+   docker-compose down
+   docker-compose up -d
+   ```
+
+4. **Verify log collection**:
+   ```bash
+   # Check Promtail is scraping
+   docker logs relay-promtail
+
+   # Query Loki directly
+   curl -G -s "http://localhost:3100/loki/api/v1/query" \
+     --data-urlencode 'query={job="relay-logs"}' | jq
+   ```
+
+### Dashboard Features
+
+#### Color Coding
+
+- **Green**: Healthy (success rate >99%, latency <500ms)
+- **Yellow**: Warning (success rate 95-99%, latency 500-1000ms)
+- **Orange**: Degraded (success rate 90-95%, latency 1-3s)
+- **Red**: Critical (success rate <90%, latency >3s)
+
+#### Auto-Refresh
+
+- Default: Every 5 seconds
+- Configurable in dashboard settings
+
+### Architecture with Logs
+
+```
+Relay App
+  ├─ Metrics → Prometheus → Grafana
+  └─ Logs → Promtail → Loki → Grafana
+```
+
+### Comparison: Basic vs Enhanced
+
+| Feature | Basic Dashboard | Enhanced Dashboard |
+|---------|----------------|-------------------|
+| Panels | 8 | 15 |
+| Logs | ❌ | ✅ (Loki) |
+| Route breakdown | ❌ | ✅ |
+| Error analysis | Basic | Detailed table |
+| Heatmaps | Basic | Enhanced |
+| Active connections | Counter | Time series |
+| Storage metrics | ❌ | ✅ |
+
+### Performance Impact
+
+- **Loki**: Minimal CPU/memory footprint
+- **Promtail**: <50MB RAM
+- **Storage**: ~100MB/day for moderate traffic
+- **Retention**: Auto-cleanup after 7 days

@@ -29,12 +29,39 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+      - ./loki-datasource.yml:/etc/grafana/provisioning/datasources/loki.yml
       - ./dashboard.json:/var/lib/grafana/dashboards/relay.json
+      - ./enhanced-dashboard.json:/var/lib/grafana/dashboards/enhanced.json
       - ./dashboard-provider.yml:/etc/grafana/provisioning/dashboards/provider.yml
     depends_on:
       - prometheus
+      - loki
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: relay-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml
+      - loki_data:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: relay-promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml
+      - /var/log:/var/log:ro
+      - ../../logs:/app/logs:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
     restart: unless-stopped
 
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:
