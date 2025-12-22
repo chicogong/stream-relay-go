@@ -28,19 +28,11 @@ schema_config:
 
 limits_config:
   retention_period: 168h  # 7 days
-  enforce_metric_name: false
   reject_old_samples: true
   reject_old_samples_max_age: 168h
   max_cache_freshness_per_query: 10m
   split_queries_by_interval: 15m
   max_query_parallelism: 32
-
-chunk_store_config:
-  max_look_back_period: 0s
-
-table_manager:
-  retention_deletes_enabled: true
-  retention_period: 168h
 
 compactor:
   working_directory: /loki/compactor
@@ -48,6 +40,7 @@ compactor:
   retention_enabled: true
   retention_delete_delay: 2h
   retention_delete_worker_count: 150
+  delete_request_store: filesystem
 
 ingester:
   max_chunk_age: 1h
