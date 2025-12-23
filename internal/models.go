@@ -102,18 +102,10 @@ type Usage struct {
 }
 
 // extractProvider 从 upstream URL 提取 provider
-func extractProvider(upstream string) string {
-	if len(upstream) > 0 {
-		// 简单提取：api.openai.com -> openai
-		parts := []string{}
-		for _, part := range []string{"openai", "anthropic", "azure", "google"} {
-			if len(upstream) > 0 && len(part) > 0 {
-				parts = append(parts, part)
-			}
-		}
-		// 这里简化处理，实际应该用正则或更复杂的逻辑
-		return "unknown"
-	}
+// nolint:unparam // TODO: implement proper provider extraction
+func extractProvider(_ string) string {
+	// TODO: 实现从 URL 提取 provider 的逻辑
+	// 例如: api.openai.com -> openai
 	return "unknown"
 }
 

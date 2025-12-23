@@ -46,8 +46,8 @@ func (rl *RateLimiter) getLimiter(tenantID string) *rate.Limiter {
 	defer rl.mu.Unlock()
 
 	// 双重检查
-	if limiter, exists := rl.limiters[tenantID]; exists {
-		return limiter
+	if l, exists := rl.limiters[tenantID]; exists {
+		return l
 	}
 
 	// 创建新的 limiter

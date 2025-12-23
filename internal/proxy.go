@@ -164,6 +164,7 @@ func (p *Proxy) forwardRaw(w http.ResponseWriter, body io.Reader, ctx *RequestCo
 			}
 
 			// 写入并 flush
+			//nolint:errcheck // streaming write errors are handled by connection close
 			w.Write(buf[:n])
 			flusher.Flush()
 

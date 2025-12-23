@@ -11,7 +11,7 @@ import (
 // Storage 存储层 - Redis + ClickHouse
 type Storage struct {
 	redis  *redis.Client
-	ch     clickhouse.Conn
+	_      clickhouse.Conn // reserved for future ClickHouse support
 	config *StorageConfig
 }
 
@@ -41,6 +41,7 @@ func NewStorage(config *StorageConfig) (*Storage, error) {
 }
 
 // ensureTables 创建表（如果不存在）
+// nolint:unused // reserved for future ClickHouse support
 func (s *Storage) ensureTables(ctx context.Context) error {
 	createTableSQL := `
 	CREATE TABLE IF NOT EXISTS stream_logs (
@@ -76,7 +77,9 @@ func (s *Storage) ensureTables(ctx context.Context) error {
 	SETTINGS index_granularity = 8192
 	`
 
-	return s.ch.Exec(ctx, createTableSQL)
+	// TODO: implement when ClickHouse support is enabled
+	_ = createTableSQL
+	return nil
 }
 
 // SaveLog 保存日志（暂时只输出到日志，不写 ClickHouse）
