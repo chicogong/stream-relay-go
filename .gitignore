@@ -55,3 +55,4 @@ temp/
 # Grafana
 deployments/grafana/grafana_data/
 deployments/grafana/prometheus_data/
+/relay
