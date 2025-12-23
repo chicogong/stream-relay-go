@@ -128,6 +128,30 @@ The dashboard provides real-time insights:
 - 🔥 **Heatmap** - Visual latency distribution
 - 🚨 **Error Monitoring** - Instant error detection with alerts
 
+### 🚀 Enhanced Dashboard with Logs
+
+![Enhanced Grafana Dashboard](docs/images/enhanced-grafana-dashboard.png)
+
+The enhanced dashboard (`enhanced-dashboard.json`) includes **15 comprehensive panels** with integrated log viewing:
+
+**Metrics Panels:**
+- 📊 Total Requests, Success Rate, Avg Response Time
+- 🔗 Active Connections, Error Count, Storage Latency
+- 📈 Request Rate Trend & Response Time Percentiles (p50/p95/p99)
+- 🎯 Requests by Route (donut chart)
+- 📊 Status Code Distribution (2xx/4xx/5xx bar gauge)
+- 🚨 Error Types Table & Active Connections Over Time
+- 🔥 Request Latency Heatmap
+- 📋 Recent Activity Log Table
+
+**Log Integration (Loki):**
+- 📝 Live application logs with filtering
+- 🔍 Search logs by level (ERROR, INFO, DEBUG)
+- 📊 Unified metrics + logs view for faster debugging
+
+**Setup:**
+The enhanced monitoring stack includes Loki + Promtail for log aggregation. See [deployments/grafana/README.md](deployments/grafana/README.md) for full setup instructions.
+
 ### Generate Demo Traffic
 
 ```bash

@@ -128,6 +128,30 @@ docker-compose up -d
 - 🔥 **热力图** - 可视化延迟分布
 - 🚨 **错误监控** - 即时错误检测与告警
 
+### 🚀 增强版仪表板（含日志）
+
+![增强版 Grafana 仪表板](docs/images/enhanced-grafana-dashboard.png)
+
+增强版仪表板（`enhanced-dashboard.json`）包含 **15 个综合面板**，集成日志查看功能：
+
+**指标面板：**
+- 📊 总请求数、成功率、平均响应时间
+- 🔗 活跃连接数、错误计数、存储延迟
+- 📈 请求速率趋势 & 响应时间百分位（p50/p95/p99）
+- 🎯 按路由分布请求（环形图）
+- 📊 状态码分布（2xx/4xx/5xx 柱状图）
+- 🚨 错误类型表格 & 活跃连接时序图
+- 🔥 请求延迟热力图
+- 📋 最近活动日志表格
+
+**日志集成（Loki）：**
+- 📝 实时应用日志，支持过滤
+- 🔍 按日志级别搜索（ERROR、INFO、DEBUG）
+- 📊 统一的指标 + 日志视图，加速问题排查
+
+**设置说明：**
+增强版监控栈包含 Loki + Promtail 用于日志聚合。完整设置说明请参见 [deployments/grafana/README.md](deployments/grafana/README.md)
+
 ### 生成演示流量
 
 ```bash
