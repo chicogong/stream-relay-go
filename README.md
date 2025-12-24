@@ -3,7 +3,7 @@
 [![CI](https://github.com/chicogong/stream-relay-go/actions/workflows/ci.yml/badge.svg)](https://github.com/chicogong/stream-relay-go/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/chicogong/stream-relay-go)](https://goreportcard.com/report/github.com/chicogong/stream-relay-go)
 [![codecov](https://codecov.io/gh/chicogong/stream-relay-go/branch/master/graph/badge.svg)](https://codecov.io/gh/chicogong/stream-relay-go)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
