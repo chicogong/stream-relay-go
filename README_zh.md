@@ -1,18 +1,15 @@
 # Stream Relay Go
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![CI](https://github.com/chicogong/stream-relay-go/actions/workflows/ci.yml/badge.svg)](https://github.com/chicogong/stream-relay-go/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/chicogong/stream-relay-go)](https://goreportcard.com/report/github.com/chicogong/stream-relay-go)
+[![codecov](https://codecov.io/gh/chicogong/stream-relay-go/branch/master/graph/badge.svg)](https://codecov.io/gh/chicogong/stream-relay-go)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 [English](README.md) | 简体中文
 
 一个轻量级、高性能的 LLM 和 TTS API 流式代理网关，内置生产级可观测性。
-
-## 🎬 演示
-
-![流式演示](docs/images/streaming-demo.gif)
-
-*逐 token 实时流式传输，延迟低于 100ms*
 
 ## ✨ 特性
 
@@ -170,8 +167,6 @@ done
 在 http://localhost:3000 实时观察指标更新
 
 > 💡 **提示**：使用 `./scripts/generate-demo.sh` 生成演示流量填充仪表板！
->
-> 📸 查看 [docs/DEMO.md](docs/DEMO.md) 了解如何创建自己的截图和演示
 
 ## 📁 项目结构
 

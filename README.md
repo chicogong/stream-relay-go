@@ -11,12 +11,6 @@ English | [简体中文](README_zh.md)
 
 A lightweight, high-performance streaming relay for LLM and TTS APIs with built-in observability.
 
-## 🎬 Demo
-
-![Streaming Demo](docs/images/streaming-demo.gif)
-
-*Real-time token-by-token streaming with sub-100ms latency*
-
 ## ✨ Features
 
 - **🚀 Low-latency Streaming** - Token-by-token SSE streaming with immediate flush
@@ -173,8 +167,6 @@ done
 Watch the metrics update in real-time at http://localhost:3000
 
 > 💡 **Tip**: Use `./scripts/generate-demo.sh` to populate the dashboard with demo traffic!
->
-> 📸 For creating your own screenshots and demos, see [docs/DEMO.md](docs/DEMO.md)
 
 ## 📁 Project Structure
 
