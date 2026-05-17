@@ -44,7 +44,7 @@ storage:
     db: 0
     ttl: 3600  # 1 hour
 
-  # ClickHouse - 用于持久化和分析（暂时禁用）
+  # ClickHouse - 用于持久化和分析（addr 为空则禁用，连接失败不影响转发）
   clickhouse:
     addr: localhost:9000
     database: relay
