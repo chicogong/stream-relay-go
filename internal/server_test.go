@@ -258,9 +258,65 @@ func TestServer_Authenticate(t *testing.T) {
 				req.Header.Set("Authorization", tt.header)
 			}
 			c.Request = req
-			if got := srv.authenticate(c); got != tt.want {
-				t.Errorf("authenticate() = %v, want %v", got, tt.want)
+			tenant, got := srv.authenticate(c)
+			if got != tt.want {
+				t.Errorf("authenticate() ok = %v, want %v", got, tt.want)
+			}
+			if got && tenant == "" {
+				t.Error("authenticate() returned empty tenant on success")
+			}
+			if !got && tenant != "" {
+				t.Errorf("authenticate() returned tenant %q on failure", tenant)
 			}
 		})
+	}
+}
+
+// TestTenantFromKey verifies tenant derivation is stable, per-key, and does
+// not leak the raw API key.
+func TestTenantFromKey(t *testing.T) {
+	a1 := tenantFromKey("sk-key-a")
+	a2 := tenantFromKey("sk-key-a")
+	b := tenantFromKey("sk-key-b")
+
+	if a1 != a2 {
+		t.Errorf("tenantFromKey not stable: %q vs %q", a1, a2)
+	}
+	if a1 == b {
+		t.Error("different keys produced the same tenant")
+	}
+	if !strings.HasPrefix(a1, "t-") {
+		t.Errorf("tenant %q missing 't-' prefix", a1)
+	}
+	if strings.Contains(a1, "sk-key-a") {
+		t.Error("derived tenant leaks the raw API key")
+	}
+}
+
+// TestServer_RateLimit_KeyedByAPIKey confirms the rate limit bucket is keyed by
+// the authenticated API key, so a client cannot bypass it via X-Tenant-ID.
+func TestServer_RateLimit_KeyedByAPIKey(t *testing.T) {
+	upstream := fakeSSEUpstream()
+	defer upstream.Close()
+
+	route := RouteConfig{Name: "chat", Path: "/v1/chat", Upstream: upstream.URL, Kind: "sse"}
+	auth := AuthConfig{APIKeys: []string{"sk-rl"}}
+	srv := newTestServer(t, route, auth, RateLimitConfig{Enabled: true, Default: 1, Burst: 1})
+
+	do := func(tenantHeader string) int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/x", strings.NewReader("{}"))
+		req.Header.Set("Authorization", "Bearer sk-rl")
+		req.Header.Set("X-Tenant-ID", tenantHeader) // must be ignored
+		rec := httptest.NewRecorder()
+		srv.engine.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if c := do("alice"); c != http.StatusOK {
+		t.Fatalf("first request code = %d, want 200", c)
+	}
+	// A different X-Tenant-ID header must NOT grant a fresh bucket.
+	if c := do("bob"); c != http.StatusTooManyRequests {
+		t.Errorf("second request code = %d, want 429 (X-Tenant-ID must not bypass limit)", c)
 	}
 }

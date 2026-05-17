@@ -7,11 +7,26 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// SetupLogger configures structured logging with JSON format
-// Logs are written to both console (text) and file (JSON)
-func SetupLogger(logDir string) (*slog.Logger, error) {
+// parseLogLevel 把配置字符串解析为 slog.Level，未知值回退到 Info
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// SetupLogger configures structured logging with JSON format.
+// Logs are written to both console (text) and file (JSON) at the given level.
+func SetupLogger(logDir, level string) (*slog.Logger, error) {
 	// Ensure log directory exists
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, err
@@ -24,13 +39,15 @@ func SetupLogger(logDir string) (*slog.Logger, error) {
 		return nil, err
 	}
 
+	lvl := parseLogLevel(level)
+
 	// Create multi-writer: console (text) + file (JSON)
 	consoleHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: lvl,
 	})
 
 	fileHandler := slog.NewJSONHandler(file, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: lvl,
 	})
 
 	// Combine handlers using a custom multi-handler

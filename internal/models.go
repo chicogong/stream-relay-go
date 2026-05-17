@@ -58,6 +58,7 @@ type RequestContext struct {
 	TTFTMs         *int64
 	TTFAMs         *int64
 	ResponseChunks []string
+	Usage          *Usage
 	StatusCode     int
 	ErrorType      string
 	ErrorMessage   string
@@ -88,13 +89,10 @@ func (ctx *RequestContext) ToStreamLog(requestBody string) *StreamLog {
 		ErrorMessage:   ctx.ErrorMessage,
 	}
 
-	// 尝试从最后一个 chunk 提取 token
-	if ctx.Route.Kind == "sse" && len(ctx.ResponseChunks) > 0 {
-		usage := extractUsage(ctx.ResponseChunks)
-		if usage != nil {
-			log.TokensIn = &usage.InputTokens
-			log.TokensOut = &usage.OutputTokens
-		}
+	// Token 用量在 SSE 转发过程中增量提取，不依赖是否保留完整 chunks
+	if ctx.Usage != nil {
+		log.TokensIn = &ctx.Usage.InputTokens
+		log.TokensOut = &ctx.Usage.OutputTokens
 	}
 
 	return log
@@ -116,19 +114,20 @@ func extractProvider(upstream string) string {
 	}
 	host := strings.ToLower(u.Hostname())
 
-	// 已知 provider 的关键字匹配
-	for keyword, name := range map[string]string{
-		"openai":      "openai",
-		"anthropic":   "anthropic",
-		"siliconflow": "siliconflow",
-		"azure":       "azure",
-		"microsoft":   "azure",
-		"googleapis":  "google",
-		"deepseek":    "deepseek",
-	} {
-		if strings.Contains(host, keyword) {
-			return name
-		}
+	// 已知 provider 的关键字匹配（switch 避免每次请求分配 map）
+	switch {
+	case strings.Contains(host, "openai"):
+		return "openai"
+	case strings.Contains(host, "anthropic"):
+		return "anthropic"
+	case strings.Contains(host, "siliconflow"):
+		return "siliconflow"
+	case strings.Contains(host, "azure"), strings.Contains(host, "microsoft"):
+		return "azure"
+	case strings.Contains(host, "googleapis"):
+		return "google"
+	case strings.Contains(host, "deepseek"):
+		return "deepseek"
 	}
 
 	// 回退：取二级域名（api.example.com -> example）
@@ -164,65 +163,81 @@ type usagePayload struct {
 	OutputTokens *int64 `json:"output_tokens"`
 }
 
+// applyUsage 把单个 usagePayload 并入 dst，返回是否含有效字段
+func applyUsage(dst *Usage, u *usagePayload) bool {
+	if u == nil {
+		return false
+	}
+	found := false
+	if u.PromptTokens != nil {
+		dst.InputTokens, found = *u.PromptTokens, true
+	}
+	if u.InputTokens != nil {
+		dst.InputTokens, found = *u.InputTokens, true
+	}
+	if u.CompletionTokens != nil {
+		dst.OutputTokens, found = *u.CompletionTokens, true
+	}
+	if u.OutputTokens != nil {
+		dst.OutputTokens, found = *u.OutputTokens, true
+	}
+	if u.TotalTokens != nil {
+		dst.TotalTokens, found = *u.TotalTokens, true
+	}
+	return found
+}
+
+// mergeUsageLine 解析单行 SSE data 并把 token 用量并入 dst，返回是否解析到用量。
+// 用于在转发过程中增量提取，避免为提取 token 而缓存整个响应。
+func mergeUsageLine(dst *Usage, line string) bool {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "data:") {
+		return false
+	}
+	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+	if payload == "" || payload == "[DONE]" {
+		return false
+	}
+
+	var obj struct {
+		Usage *usagePayload `json:"usage"`
+		// Anthropic message_start 把 usage 嵌在 message 下
+		Message *struct {
+			Usage *usagePayload `json:"usage"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return false
+	}
+
+	found := applyUsage(dst, obj.Usage)
+	if obj.Message != nil && applyUsage(dst, obj.Message.Usage) {
+		found = true
+	}
+	return found
+}
+
+// finalizeUsage 在收集完成后补全 TotalTokens
+func finalizeUsage(u *Usage) {
+	if u.TotalTokens == 0 {
+		u.TotalTokens = u.InputTokens + u.OutputTokens
+	}
+}
+
 // extractUsage 从 SSE 响应 chunks 中提取 token 使用量
 // 支持 OpenAI（prompt_tokens/completion_tokens，需 stream_options.include_usage）
 // 与 Anthropic（input_tokens/output_tokens，分散在 message_start / message_delta 事件）
 func extractUsage(chunks []string) *Usage {
 	var usage Usage
 	found := false
-
-	apply := func(u *usagePayload) {
-		if u == nil {
-			return
-		}
-		if u.PromptTokens != nil {
-			usage.InputTokens, found = *u.PromptTokens, true
-		}
-		if u.InputTokens != nil {
-			usage.InputTokens, found = *u.InputTokens, true
-		}
-		if u.CompletionTokens != nil {
-			usage.OutputTokens, found = *u.CompletionTokens, true
-		}
-		if u.OutputTokens != nil {
-			usage.OutputTokens, found = *u.OutputTokens, true
-		}
-		if u.TotalTokens != nil {
-			usage.TotalTokens, found = *u.TotalTokens, true
-		}
-	}
-
 	for _, line := range chunks {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" || payload == "[DONE]" {
-			continue
-		}
-
-		var obj struct {
-			Usage *usagePayload `json:"usage"`
-			// Anthropic message_start 把 usage 嵌在 message 下
-			Message *struct {
-				Usage *usagePayload `json:"usage"`
-			} `json:"message"`
-		}
-		if err := json.Unmarshal([]byte(payload), &obj); err != nil {
-			continue
-		}
-		apply(obj.Usage)
-		if obj.Message != nil {
-			apply(obj.Message.Usage)
+		if mergeUsageLine(&usage, line) {
+			found = true
 		}
 	}
-
 	if !found {
 		return nil
 	}
-	if usage.TotalTokens == 0 {
-		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
-	}
+	finalizeUsage(&usage)
 	return &usage
 }

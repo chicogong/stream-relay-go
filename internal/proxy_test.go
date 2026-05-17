@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -33,6 +34,8 @@ func newTestProxy(routes []RouteConfig) *Proxy {
 			MaxBodySize: 1 << 20,
 		},
 		Routes: routes,
+		// detailed_logs 开启，使依赖 ResponseChunks 的测试可检视完整响应
+		Observability: ObservabilityConfig{DetailedLogs: true},
 	}
 	return NewProxy(cfg, nil, getTestMetrics())
 }
@@ -69,7 +72,7 @@ func TestProxy_ForwardSSE(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"q":1}`))
 	rec := httptest.NewRecorder()
 
-	if err := proxy.Handle(rec, req); err != nil {
+	if err := proxy.Handle(rec, req, "test-tenant"); err != nil {
 		t.Fatalf("Handle returned error: %v", err)
 	}
 
@@ -159,7 +162,7 @@ func TestProxy_ForwardRaw(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/tts/speech", strings.NewReader("text"))
 	rec := httptest.NewRecorder()
 
-	if err := proxy.Handle(rec, req); err != nil {
+	if err := proxy.Handle(rec, req, "test-tenant"); err != nil {
 		t.Fatalf("Handle returned error: %v", err)
 	}
 
@@ -221,7 +224,7 @@ func TestProxy_RouteNotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/no/such/route", strings.NewReader("x"))
 	rec := httptest.NewRecorder()
 
-	err := proxy.Handle(rec, req)
+	err := proxy.Handle(rec, req, "test-tenant")
 	if err == nil {
 		t.Fatal("expected error for unmatched route")
 	}
@@ -237,11 +240,12 @@ func TestProxy_UpstreamError(t *testing.T) {
 		{Name: "chat", Path: "/v1/chat", Upstream: "http://192.0.2.1:1", Kind: "sse"},
 	})
 	proxy.client.Timeout = 200 * time.Millisecond
+	proxy.maxRetries = 0 // keep the test fast; retry behavior is covered separately
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/x", strings.NewReader("x"))
 	rec := httptest.NewRecorder()
 
-	err := proxy.Handle(rec, req)
+	err := proxy.Handle(rec, req, "test-tenant")
 	if err == nil {
 		t.Fatal("expected error for unreachable upstream")
 	}
@@ -370,7 +374,7 @@ func TestProxy_UpstreamReceivesInjectedAuth(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer client-token")
 	rec := httptest.NewRecorder()
 
-	if err := proxy.Handle(rec, req); err != nil {
+	if err := proxy.Handle(rec, req, "test-tenant"); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 
@@ -379,5 +383,95 @@ func TestProxy_UpstreamReceivesInjectedAuth(t *testing.T) {
 	}
 	if !strings.Contains(gotURL, "/v1/chat/completions") || !strings.Contains(gotURL, "model=x") {
 		t.Errorf("upstream URL = %q, want path + query forwarded", gotURL)
+	}
+}
+
+// TestProxy_RetryOnTransientFailure verifies the proxy retries a connection
+// error and succeeds on a subsequent attempt.
+func TestProxy_RetryOnTransientFailure(t *testing.T) {
+	var calls int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			// Abruptly drop the connection to simulate a transport failure.
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Error("hijack unsupported")
+				return
+			}
+			conn, _, err := hj.Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: ok\ndata: [DONE]\n")
+	}))
+	defer upstream.Close()
+
+	proxy := newTestProxy([]RouteConfig{
+		{Name: "chat", Path: "/v1/chat", Upstream: upstream.URL, Kind: "sse"},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/x", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	if err := proxy.Handle(rec, req, "test-tenant"); err != nil {
+		t.Fatalf("Handle after retry: %v", err)
+	}
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Result().StatusCode)
+	}
+	if n := atomic.LoadInt32(&calls); n < 2 {
+		t.Errorf("upstream calls = %d, want >= 2 (a retry should have occurred)", n)
+	}
+}
+
+// TestProxy_SSE_ChunkCollectionGated verifies detailed_logs gates full chunk
+// retention while token usage is still extracted incrementally either way.
+func TestProxy_SSE_ChunkCollectionGated(t *testing.T) {
+	lines := []string{
+		`data: {"choices":[{"delta":{"content":"hi"}}]}`,
+		`data: {"usage":{"prompt_tokens":3,"completion_tokens":7}}`,
+		"data: [DONE]",
+	}
+	run := func(detailed bool) *RequestContext {
+		up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fl := w.(http.Flusher)
+			for _, l := range lines {
+				_, _ = io.WriteString(w, l+"\n")
+				fl.Flush()
+			}
+		}))
+		defer up.Close()
+
+		route := RouteConfig{Name: "chat", Path: "/v1/chat", Upstream: up.URL, Kind: "sse"}
+		proxy := newTestProxy([]RouteConfig{route})
+		proxy.config.Observability.DetailedLogs = detailed
+
+		resp := httpGet(t, up.URL+"/v1/chat")
+		defer resp.Body.Close()
+		ctx := &RequestContext{Route: &route, StartTime: time.Now()}
+		if err := proxy.forwardSSE(httptest.NewRecorder(), resp.Body, ctx); err != nil {
+			t.Fatalf("forwardSSE: %v", err)
+		}
+		return ctx
+	}
+
+	// detailed_logs ON: full chunks retained.
+	if on := run(true); len(on.ResponseChunks) != 3 {
+		t.Errorf("detailed on: ResponseChunks = %d, want 3", len(on.ResponseChunks))
+	}
+
+	// detailed_logs OFF: no chunks retained, but usage still extracted.
+	off := run(false)
+	if len(off.ResponseChunks) != 0 {
+		t.Errorf("detailed off: ResponseChunks = %d, want 0", len(off.ResponseChunks))
+	}
+	if off.Usage == nil {
+		t.Fatal("detailed off: Usage should still be extracted incrementally")
+	}
+	if off.Usage.InputTokens != 3 || off.Usage.OutputTokens != 7 {
+		t.Errorf("detailed off: usage = %+v, want in=3 out=7", *off.Usage)
 	}
 }

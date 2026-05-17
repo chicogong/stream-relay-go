@@ -2,7 +2,9 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -71,20 +73,16 @@ func (s *Server) setupRoutes() {
 
 // handleProxy 处理代理请求
 func (s *Server) handleProxy(c *gin.Context) {
-	// 1. 鉴权
-	if !s.authenticate(c) {
+	// 1. 鉴权，并从 API Key 派生租户标识
+	tenantID, ok := s.authenticate(c)
+	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "unauthorized",
 		})
 		return
 	}
 
-	// 2. 限流
-	tenantID := c.GetHeader("X-Tenant-ID")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
+	// 2. 限流（按租户；租户来自已鉴权的 API Key，客户端无法伪造）
 	if !s.limiter.Allow(tenantID) {
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"error": "rate limit exceeded",
@@ -98,7 +96,7 @@ func (s *Server) handleProxy(c *gin.Context) {
 	}
 
 	// 4. 转发
-	if err := s.proxy.Handle(c.Writer, c.Request); err != nil {
+	if err := s.proxy.Handle(c.Writer, c.Request, tenantID); err != nil {
 		// 错误已经在 proxy.Handle 中记录
 		if !c.Writer.Written() {
 			status := http.StatusBadGateway
@@ -112,11 +110,11 @@ func (s *Server) handleProxy(c *gin.Context) {
 	}
 }
 
-// authenticate 鉴权
-func (s *Server) authenticate(c *gin.Context) bool {
+// authenticate 校验 Bearer API Key；成功时返回由该 Key 派生的租户标识
+func (s *Server) authenticate(c *gin.Context) (string, bool) {
 	auth := c.GetHeader("Authorization")
 	if auth == "" {
-		return false
+		return "", false
 	}
 
 	// Bearer token
@@ -124,11 +122,18 @@ func (s *Server) authenticate(c *gin.Context) bool {
 	for _, key := range s.config.Auth.APIKeys {
 		// 常量时间比较，避免计时侧信道
 		if subtleConstantTimeEq(token, key) {
-			return true
+			return tenantFromKey(key), true
 		}
 	}
 
-	return false
+	return "", false
+}
+
+// tenantFromKey 从 API Key 派生稳定且不可逆的租户标识，
+// 避免把原始 Key 写入日志/指标，同时保证同一 Key 始终映射到同一租户。
+func tenantFromKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return "t-" + hex.EncodeToString(sum[:4])
 }
 
 // handleHealth 健康检查 - 进程存活即返回 OK
