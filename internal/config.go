@@ -95,12 +95,39 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
+	// 填充缺省值
+	cfg.applyDefaults()
+
 	// 验证配置
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 
 	return &cfg, nil
+}
+
+// applyDefaults 为未显式配置的字段填充合理默认值
+func (c *Config) applyDefaults() {
+	if c.Server.Timeout <= 0 {
+		c.Server.Timeout = 300 * time.Second
+	}
+	if c.Server.MaxBodySize <= 0 {
+		c.Server.MaxBodySize = 10 << 20 // 10MB
+	}
+	if c.Observability.Prometheus.Enabled && c.Observability.Prometheus.Path == "" {
+		c.Observability.Prometheus.Path = "/metrics"
+	}
+	if c.Observability.Logging.Level == "" {
+		c.Observability.Logging.Level = "info"
+	}
+	if c.RateLimit.Enabled {
+		if c.RateLimit.Default <= 0 {
+			c.RateLimit.Default = 100
+		}
+		if c.RateLimit.Burst <= 0 {
+			c.RateLimit.Burst = 20
+		}
+	}
 }
 
 // Validate 验证配置

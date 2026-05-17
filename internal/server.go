@@ -171,6 +171,7 @@ func (s *Server) Start() error {
 
 // Shutdown 优雅关闭 - 停止接收新请求并等待进行中的请求完成
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.limiter.Stop()
 	return s.http.Shutdown(ctx)
 }
 

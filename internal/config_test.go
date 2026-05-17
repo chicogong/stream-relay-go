@@ -198,6 +198,47 @@ func TestConfig_Validate(t *testing.T) {
 	}
 }
 
+func TestConfig_applyDefaults(t *testing.T) {
+	cfg := &Config{
+		Observability: ObservabilityConfig{
+			Prometheus: PrometheusConfig{Enabled: true},
+		},
+		RateLimit: RateLimitConfig{Enabled: true},
+	}
+	cfg.applyDefaults()
+
+	if cfg.Server.Timeout != 300*time.Second {
+		t.Errorf("Timeout default = %v, want 300s", cfg.Server.Timeout)
+	}
+	if cfg.Server.MaxBodySize != 10<<20 {
+		t.Errorf("MaxBodySize default = %d, want %d", cfg.Server.MaxBodySize, 10<<20)
+	}
+	if cfg.Observability.Prometheus.Path != "/metrics" {
+		t.Errorf("Prometheus.Path default = %q, want /metrics", cfg.Observability.Prometheus.Path)
+	}
+	if cfg.Observability.Logging.Level != "info" {
+		t.Errorf("Logging.Level default = %q, want info", cfg.Observability.Logging.Level)
+	}
+	if cfg.RateLimit.Default != 100 || cfg.RateLimit.Burst != 20 {
+		t.Errorf("RateLimit defaults = %d/%d, want 100/20", cfg.RateLimit.Default, cfg.RateLimit.Burst)
+	}
+}
+
+func TestConfig_applyDefaults_RespectsExplicitValues(t *testing.T) {
+	cfg := &Config{
+		Server:    ServerConfig{Timeout: 5 * time.Second, MaxBodySize: 123},
+		RateLimit: RateLimitConfig{Enabled: true, Default: 7, Burst: 3},
+	}
+	cfg.applyDefaults()
+
+	if cfg.Server.Timeout != 5*time.Second || cfg.Server.MaxBodySize != 123 {
+		t.Error("applyDefaults must not overwrite explicit server values")
+	}
+	if cfg.RateLimit.Default != 7 || cfg.RateLimit.Burst != 3 {
+		t.Error("applyDefaults must not overwrite explicit rate limit values")
+	}
+}
+
 func TestConfig_GetRouteByPath(t *testing.T) {
 	cfg := &Config{
 		Routes: []RouteConfig{
