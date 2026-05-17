@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -58,12 +59,17 @@ func (h *MultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *MultiHandler) Handle(ctx context.Context, record slog.Record) error {
+	// 即使某个 handler 失败也继续派发给其余 handler，避免单点失败丢日志
+	var errs []error
 	for _, handler := range h.handlers {
+		if !handler.Enabled(ctx, record.Level) {
+			continue
+		}
 		if err := handler.Handle(ctx, record); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (h *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

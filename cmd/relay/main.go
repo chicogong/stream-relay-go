@@ -62,7 +62,7 @@ func main() {
 	slog.Info("Proxy initialized")
 
 	// 初始化服务器
-	server := internal.NewServer(config, proxy, limiter)
+	server := internal.NewServer(config, proxy, limiter, storage)
 	slog.Info("Server initialized", "port", config.Server.Port)
 
 	// 启动服务器（在 goroutine 中）

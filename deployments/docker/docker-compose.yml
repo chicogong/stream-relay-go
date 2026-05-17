@@ -1,6 +1,34 @@
 version: '3.8'
 
 services:
+  # Stream Relay - HTTP relay for streaming LLM/TTS APIs
+  relay:
+    build:
+      # Build context is the repo root (two levels up) so the Dockerfile
+      # can see go.mod, cmd/, internal/ and configs/.
+      context: ../..
+      dockerfile: Dockerfile
+    image: stream-relay-go:latest
+    container_name: relay-app
+    ports:
+      - "8080:8080"
+    # API keys are read from the environment by config.yaml (os.ExpandEnv)
+    # and per-route auth_env. Copy ../../.env.example to ../../.env.
+    env_file:
+      - ../../.env
+    volumes:
+      - relay-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
   # Redis - 用于实时查询
   redis:
     image: redis:7-alpine
@@ -43,3 +71,4 @@ services:
 volumes:
   redis-data:
   clickhouse-data:
+  relay-logs:

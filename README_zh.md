@@ -42,7 +42,7 @@ SSE 流式代理 ← → 上游 API
 
 ### 前置要求
 
-- Go 1.21+
+- Go 1.23+
 - （可选）Docker 用于监控栈
 
 ### 安装
@@ -257,6 +257,7 @@ storage:
 | `relay_duration_ms` | Histogram | 请求持续时间（毫秒） | `route` |
 | `relay_errors_total` | Counter | 错误总数 | `route`、`type` |
 | `relay_active_connections` | Gauge | 当前活跃连接数 | `route` |
+| `relay_tokens_total` | Counter | 处理的 token 总数（从流式 usage 中提取） | `route`、`direction`（input/output） |
 | `relay_storage_write_ms` | Histogram | 存储写入延迟（毫秒） | - |
 
 ### 直方图桶
@@ -284,6 +285,9 @@ rate(relay_errors_total[1m])
 
 # 按路由的活跃连接数
 relay_active_connections
+
+# Token 吞吐量（每分钟 token 数，按方向区分）
+rate(relay_tokens_total[1m]) * 60
 ```
 
 ### Grafana 仪表板

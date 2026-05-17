@@ -3,6 +3,7 @@ package internal
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestNewRateLimiter(t *testing.T) {
@@ -136,6 +137,7 @@ func TestRateLimiter_getLimiter_DoubleCheck(t *testing.T) {
 	}
 
 	rl := NewRateLimiter(config)
+	defer rl.Stop()
 
 	// Get limiter twice for same tenant
 	l1 := rl.getLimiter("tenant1")
@@ -145,4 +147,39 @@ func TestRateLimiter_getLimiter_DoubleCheck(t *testing.T) {
 	if l1 != l2 {
 		t.Error("getLimiter should return same instance for same tenant")
 	}
+}
+
+// TestRateLimiter_Sweep verifies idle limiters are evicted while active ones survive.
+func TestRateLimiter_Sweep(t *testing.T) {
+	rl := NewRateLimiter(&RateLimitConfig{Enabled: true, Default: 60, Burst: 5})
+	defer rl.Stop()
+
+	rl.getLimiter("active")
+	rl.getLimiter("idle")
+
+	// Make the "idle" tenant look stale.
+	rl.mu.Lock()
+	rl.limiters["idle"].lastSeen = time.Now().Add(-limiterIdleTTL - time.Minute)
+	rl.mu.Unlock()
+
+	rl.sweep()
+
+	rl.mu.Lock()
+	_, idleExists := rl.limiters["idle"]
+	_, activeExists := rl.limiters["active"]
+	rl.mu.Unlock()
+
+	if idleExists {
+		t.Error("idle limiter should have been swept")
+	}
+	if !activeExists {
+		t.Error("active limiter should have survived the sweep")
+	}
+}
+
+// TestRateLimiter_Stop_Idempotent confirms Stop can be called repeatedly.
+func TestRateLimiter_Stop_Idempotent(t *testing.T) {
+	rl := NewRateLimiter(&RateLimitConfig{Enabled: true, Default: 60, Burst: 5})
+	rl.Stop()
+	rl.Stop() // must not panic on a second close
 }

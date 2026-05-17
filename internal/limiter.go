@@ -7,19 +7,39 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// RateLimiter 简单的限流器 - 基于 token bucket
-type RateLimiter struct {
-	limiters map[string]*rate.Limiter
-	mu       sync.RWMutex
-	config   *RateLimitConfig
+const (
+	// limiterIdleTTL 租户 limiter 空闲多久后被回收
+	limiterIdleTTL = 10 * time.Minute
+	// limiterSweepInterval 清理协程的扫描间隔
+	limiterSweepInterval = 1 * time.Minute
+)
+
+// limiterEntry 单个租户的限流器及其最近活跃时间
+type limiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
-// NewRateLimiter 创建限流器
+// RateLimiter 基于 token bucket 的按租户限流器
+type RateLimiter struct {
+	limiters map[string]*limiterEntry
+	mu       sync.Mutex
+	config   *RateLimitConfig
+	stop     chan struct{}
+	stopOnce sync.Once
+}
+
+// NewRateLimiter 创建限流器；启用时会启动单个后台清理协程
 func NewRateLimiter(config *RateLimitConfig) *RateLimiter {
-	return &RateLimiter{
-		limiters: make(map[string]*rate.Limiter),
+	rl := &RateLimiter{
+		limiters: make(map[string]*limiterEntry),
 		config:   config,
+		stop:     make(chan struct{}),
 	}
+	if config.Enabled {
+		go rl.sweepLoop()
+	}
+	return rl
 }
 
 // Allow 检查是否允许请求
@@ -27,47 +47,54 @@ func (rl *RateLimiter) Allow(tenantID string) bool {
 	if !rl.config.Enabled {
 		return true
 	}
-
-	limiter := rl.getLimiter(tenantID)
-	return limiter.Allow()
+	return rl.getLimiter(tenantID).Allow()
 }
 
-// getLimiter 获取或创建 limiter
+// getLimiter 获取或创建租户 limiter，并刷新其活跃时间
 func (rl *RateLimiter) getLimiter(tenantID string) *rate.Limiter {
-	rl.mu.RLock()
-	limiter, exists := rl.limiters[tenantID]
-	rl.mu.RUnlock()
-
-	if exists {
-		return limiter
-	}
-
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	// 双重检查
-	if l, exists := rl.limiters[tenantID]; exists {
-		return l
+	entry, exists := rl.limiters[tenantID]
+	if !exists {
+		// rate.Limit 表示每秒请求数，Default 配置为每分钟，故除以 60
+		r := rate.Limit(float64(rl.config.Default) / 60.0)
+		entry = &limiterEntry{limiter: rate.NewLimiter(r, rl.config.Burst)}
+		rl.limiters[tenantID] = entry
 	}
-
-	// 创建新的 limiter
-	// rate.Limit 表示每秒的请求数
-	r := rate.Limit(float64(rl.config.Default) / 60.0) // 转换为每秒
-	limiter = rate.NewLimiter(r, rl.config.Burst)
-	rl.limiters[tenantID] = limiter
-
-	// 定期清理（可选）
-	go rl.cleanup(tenantID)
-
-	return limiter
+	entry.lastSeen = time.Now()
+	return entry.limiter
 }
 
-// cleanup 清理不活跃的 limiter（避免内存泄漏）
-func (rl *RateLimiter) cleanup(tenantID string) {
-	time.Sleep(1 * time.Hour)
+// sweepLoop 后台清理协程：定期回收空闲 limiter，直到 Stop 被调用
+func (rl *RateLimiter) sweepLoop() {
+	ticker := time.NewTicker(limiterSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-rl.stop:
+			return
+		case <-ticker.C:
+			rl.sweep()
+		}
+	}
+}
 
+// sweep 回收超过空闲 TTL 未使用的 limiter，避免内存随租户数无限增长
+func (rl *RateLimiter) sweep() {
+	cutoff := time.Now().Add(-limiterIdleTTL)
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+	for id, entry := range rl.limiters {
+		if entry.lastSeen.Before(cutoff) {
+			delete(rl.limiters, id)
+		}
+	}
+}
 
-	delete(rl.limiters, tenantID)
+// Stop 停止后台清理协程（幂等，供优雅关闭调用）
+func (rl *RateLimiter) Stop() {
+	rl.stopOnce.Do(func() {
+		close(rl.stop)
+	})
 }
