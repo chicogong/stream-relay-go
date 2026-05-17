@@ -21,20 +21,29 @@ var ErrRequestTooLarge = errors.New("request body too large")
 // 大 JSON chunk 会触发 ErrTooLong，这里放宽到 1MB）
 const maxSSELineSize = 1024 * 1024
 
+const (
+	// maxUpstreamRetries 上游连接错误的默认最大重试次数
+	maxUpstreamRetries = 2
+	// retryBaseDelay 重试退避基准（第 n 次重试等待 n*base）
+	retryBaseDelay = 100 * time.Millisecond
+)
+
 // Proxy 核心转发器 - 只做一件事：转发流并收集元数据
 type Proxy struct {
-	config  *Config
-	storage *Storage
-	metrics *Metrics
-	client  *http.Client
+	config     *Config
+	storage    *Storage
+	metrics    *Metrics
+	client     *http.Client
+	maxRetries int
 }
 
 // NewProxy 创建代理
 func NewProxy(config *Config, storage *Storage, metrics *Metrics) *Proxy {
 	return &Proxy{
-		config:  config,
-		storage: storage,
-		metrics: metrics,
+		config:     config,
+		storage:    storage,
+		metrics:    metrics,
+		maxRetries: maxUpstreamRetries,
 		client: &http.Client{
 			Timeout: config.Server.Timeout,
 			Transport: &http.Transport{
@@ -46,12 +55,13 @@ func NewProxy(config *Config, storage *Storage, metrics *Metrics) *Proxy {
 	}
 }
 
-// Handle 处理请求 - 核心逻辑
-func (p *Proxy) Handle(w http.ResponseWriter, r *http.Request) error {
+// Handle 处理请求 - 核心逻辑。tenantID 由调用方从已鉴权的 API Key 派生，
+// 不可由客户端请求头伪造。
+func (p *Proxy) Handle(w http.ResponseWriter, r *http.Request, tenantID string) error {
 	// 1. 创建请求上下文
 	ctx := &RequestContext{
 		RequestID: uuid.New().String(),
-		TenantID:  r.Header.Get("X-Tenant-ID"),
+		TenantID:  tenantID,
 		StartTime: time.Now(),
 	}
 
@@ -82,14 +92,8 @@ func (p *Proxy) Handle(w http.ResponseWriter, r *http.Request) error {
 	ctx.BytesIn = int64(len(requestBody))
 	r.Body.Close()
 
-	// 4. 构造上游请求
-	upstreamReq, err := p.buildUpstreamRequest(r, route, requestBody)
-	if err != nil {
-		return fmt.Errorf("build upstream request: %w", err)
-	}
-
-	// 5. 发起请求
-	upstreamResp, err := p.client.Do(upstreamReq)
+	// 4. 发起上游请求（对连接错误做有限重试）
+	upstreamResp, err := p.doWithRetry(r, route, requestBody)
 	if err != nil {
 		ctx.ErrorType = "upstream_error"
 		ctx.ErrorMessage = err.Error()
@@ -120,6 +124,36 @@ func (p *Proxy) Handle(w http.ResponseWriter, r *http.Request) error {
 	return err
 }
 
+// doWithRetry 发起上游请求，对连接错误做有限重试。
+// 仅在尚未收到任何响应时重试，因此对幂等的流式请求是安全的；
+// 客户端取消（context 结束）则立即放弃。
+func (p *Proxy) doWithRetry(r *http.Request, route *RouteConfig, body []byte) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		req, err := p.buildUpstreamRequest(r, route, body)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := p.client.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+
+		// 重试次数耗尽或客户端已取消则放弃
+		if attempt >= p.maxRetries || r.Context().Err() != nil {
+			return nil, lastErr
+		}
+
+		select {
+		case <-r.Context().Done():
+			return nil, r.Context().Err()
+		case <-time.After(retryBaseDelay * time.Duration(attempt+1)):
+		}
+	}
+}
+
 // forwardSSE 转发 SSE 流
 func (p *Proxy) forwardSSE(w http.ResponseWriter, body io.Reader, ctx *RequestContext) error {
 	flusher, ok := w.(http.Flusher)
@@ -130,7 +164,13 @@ func (p *Proxy) forwardSSE(w http.ResponseWriter, body io.Reader, ctx *RequestCo
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxSSELineSize)
 	firstToken := true
-	chunks := []string{}
+
+	// detailed_logs 开启时保留完整响应用于存储；关闭时仅做增量统计，
+	// 内存占用与响应长度无关（token 用量仍可增量提取）
+	collectAll := p.config.Observability.DetailedLogs
+	var chunks []string
+	var usage Usage
+	usageFound := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -142,8 +182,15 @@ func (p *Proxy) forwardSSE(w http.ResponseWriter, body io.Reader, ctx *RequestCo
 			firstToken = false
 		}
 
-		// 收集 chunks（完整存储）
-		chunks = append(chunks, line)
+		// 增量提取 token 用量
+		if mergeUsageLine(&usage, line) {
+			usageFound = true
+		}
+
+		// 仅在需要完整存储时收集 chunks
+		if collectAll {
+			chunks = append(chunks, line)
+		}
 
 		// 写入并立刻 flush
 		fmt.Fprintf(w, "%s\n", line)
@@ -153,7 +200,13 @@ func (p *Proxy) forwardSSE(w http.ResponseWriter, body io.Reader, ctx *RequestCo
 		ctx.ChunksCount++
 	}
 
-	ctx.ResponseChunks = chunks
+	if collectAll {
+		ctx.ResponseChunks = chunks
+	}
+	if usageFound {
+		finalizeUsage(&usage)
+		ctx.Usage = &usage
+	}
 
 	if err := scanner.Err(); err != nil {
 		ctx.ErrorType = "stream_error"

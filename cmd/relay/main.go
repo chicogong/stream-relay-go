@@ -18,21 +18,21 @@ func main() {
 	configPath := flag.String("config", "configs/config.yaml", "Path to config file")
 	flag.Parse()
 
-	// 初始化日志系统
-	logger, err := internal.SetupLogger("logs")
+	// 先加载配置（日志级别来自配置）
+	config, err := internal.LoadConfig(*configPath)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config (%s): %v\n", *configPath, err)
+		os.Exit(1)
+	}
+
+	// 初始化日志系统（应用配置中的日志级别）
+	if _, err = internal.SetupLogger("logs", config.Observability.Logging.Level); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to setup logger: %v\n", err)
 		os.Exit(1)
 	}
 	slog.Info("Starting Stream Relay Go", "version", "1.0.0")
-
-	// 加载配置
-	config, err := internal.LoadConfig(*configPath)
-	if err != nil {
-		slog.Error("Failed to load config", "error", err, "path", *configPath)
-		os.Exit(1)
-	}
-	slog.Info("Configuration loaded", "path", *configPath)
+	slog.Info("Configuration loaded", "path", *configPath,
+		"log_level", config.Observability.Logging.Level)
 
 	// 初始化存储（暂时容错，允许存储失败）
 	storage, err := internal.NewStorage(&config.Storage)
@@ -91,5 +91,4 @@ func main() {
 	}
 
 	slog.Info("Server stopped successfully")
-	_ = logger // prevent unused variable warning
 }
