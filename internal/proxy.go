@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,13 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// ErrRequestTooLarge 请求体超过 max_body_size 限制
+var ErrRequestTooLarge = errors.New("request body too large")
+
+// maxSSELineSize SSE 单行最大字节数（默认 bufio.Scanner 上限仅 64KB，
+// 大 JSON chunk 会触发 ErrTooLong，这里放宽到 1MB）
+const maxSSELineSize = 1024 * 1024
 
 // Proxy 核心转发器 - 只做一件事：转发流并收集元数据
 type Proxy struct {
@@ -54,9 +62,21 @@ func (p *Proxy) Handle(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx.Route = route
 
+	// 活跃连接计数（按路由）
+	p.metrics.IncActiveConnections(route.Name)
+	defer p.metrics.DecActiveConnections(route.Name)
+
 	// 3. 读取请求体（需要重放给上游）
 	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
+		r.Body.Close()
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			ctx.ErrorType = "request_too_large"
+			ctx.ErrorMessage = err.Error()
+			p.saveLog(ctx, "")
+			return ErrRequestTooLarge
+		}
 		return fmt.Errorf("read request body: %w", err)
 	}
 	ctx.BytesIn = int64(len(requestBody))
@@ -108,6 +128,7 @@ func (p *Proxy) forwardSSE(w http.ResponseWriter, body io.Reader, ctx *RequestCo
 	}
 
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxSSELineSize)
 	firstToken := true
 	chunks := []string{}
 
@@ -223,17 +244,20 @@ func (p *Proxy) buildUpstreamRequest(r *http.Request, route *RouteConfig, body [
 	return req, nil
 }
 
-// saveLog 保存日志（同步）
+// saveLog 保存日志并更新指标（同步）
 func (p *Proxy) saveLog(ctx *RequestContext, requestBody string) {
 	log := ctx.ToStreamLog(requestBody)
 
-	// 同步写入存储（简单可靠）
+	// 同步写入存储（简单可靠），并记录写入延迟
 	if p.storage != nil {
-		if err := p.storage.SaveLog(context.Background(), log); err != nil {
+		start := time.Now()
+		err := p.storage.SaveLog(context.Background(), log)
+		p.metrics.RecordStorageWrite(time.Since(start))
+		if err != nil {
 			p.metrics.RecordStorageError()
 		}
 	}
 
 	// 更新 Prometheus 指标
-	p.metrics.RecordRequest(ctx)
+	p.metrics.RecordRequest(log)
 }

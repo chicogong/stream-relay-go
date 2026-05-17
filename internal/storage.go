@@ -92,6 +92,14 @@ func (s *Storage) SaveLog(ctx context.Context, log *StreamLog) error {
 	return nil
 }
 
+// Ping 检查存储依赖是否可达（供 /readyz 使用）
+func (s *Storage) Ping(ctx context.Context) error {
+	if s == nil || s.redis == nil {
+		return nil
+	}
+	return s.redis.Ping(ctx).Err()
+}
+
 // Close 关闭连接
 func (s *Storage) Close() error {
 	if s.redis != nil {

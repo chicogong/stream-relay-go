@@ -2,7 +2,10 @@ package internal
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,11 +19,13 @@ type Server struct {
 	config  *Config
 	proxy   *Proxy
 	limiter *RateLimiter
+	storage *Storage
 	engine  *gin.Engine
+	http    *http.Server
 }
 
 // NewServer 创建服务器
-func NewServer(config *Config, proxy *Proxy, limiter *RateLimiter) *Server {
+func NewServer(config *Config, proxy *Proxy, limiter *RateLimiter, storage *Storage) *Server {
 	// 设置 Gin 模式
 	if config.Observability.Logging.Level != "debug" {
 		gin.SetMode(gin.ReleaseMode)
@@ -33,10 +38,19 @@ func NewServer(config *Config, proxy *Proxy, limiter *RateLimiter) *Server {
 		config:  config,
 		proxy:   proxy,
 		limiter: limiter,
+		storage: storage,
 		engine:  engine,
 	}
 
 	s.setupRoutes()
+
+	s.http = &http.Server{
+		Addr:    fmt.Sprintf(":%d", config.Server.Port),
+		Handler: engine,
+		// 防止慢速 header 攻击；请求体读取超时由 proxy 的 http.Client 控制
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
 	return s
 }
 
@@ -78,11 +92,20 @@ func (s *Server) handleProxy(c *gin.Context) {
 		return
 	}
 
-	// 3. 转发
+	// 3. 限制请求体大小（防止内存耗尽）
+	if maxBytes := s.config.Server.MaxBodySize; maxBytes > 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+	}
+
+	// 4. 转发
 	if err := s.proxy.Handle(c.Writer, c.Request); err != nil {
 		// 错误已经在 proxy.Handle 中记录
 		if !c.Writer.Written() {
-			c.JSON(http.StatusBadGateway, gin.H{
+			status := http.StatusBadGateway
+			if errors.Is(err, ErrRequestTooLarge) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			c.JSON(status, gin.H{
 				"error": err.Error(),
 			})
 		}
@@ -99,7 +122,8 @@ func (s *Server) authenticate(c *gin.Context) bool {
 	// Bearer token
 	token := strings.TrimPrefix(auth, "Bearer ")
 	for _, key := range s.config.Auth.APIKeys {
-		if token == key {
+		// 常量时间比较，避免计时侧信道
+		if subtleConstantTimeEq(token, key) {
 			return true
 		}
 	}
@@ -107,7 +131,7 @@ func (s *Server) authenticate(c *gin.Context) bool {
 	return false
 }
 
-// handleHealth 健康检查
+// handleHealth 健康检查 - 进程存活即返回 OK
 func (s *Server) handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "healthy",
@@ -115,25 +139,42 @@ func (s *Server) handleHealth(c *gin.Context) {
 	})
 }
 
-// handleReady 就绪检查
+// handleReady 就绪检查 - 校验可选依赖（Redis）是否可达
 func (s *Server) handleReady(c *gin.Context) {
-	// TODO: 检查依赖项（Redis, ClickHouse）
+	if s.storage != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.storage.Ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"error":  err.Error(),
+				"time":   time.Now().Unix(),
+			})
+			return
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ready",
 		"time":   time.Now().Unix(),
 	})
 }
 
-// Start 启动服务器
+// Start 启动服务器（阻塞直到关闭）
 func (s *Server) Start() error {
-	addr := fmt.Sprintf(":%d", s.config.Server.Port)
-	fmt.Printf("Starting server on %s\n", addr)
-	return s.engine.Run(addr)
+	slog.Info("HTTP server listening", "addr", s.http.Addr)
+	if err := s.http.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
-// Shutdown 优雅关闭
+// Shutdown 优雅关闭 - 停止接收新请求并等待进行中的请求完成
 func (s *Server) Shutdown(ctx context.Context) error {
-	// Gin 没有内置 Shutdown，需要用标准库
-	// 这里简化处理
-	return nil
+	return s.http.Shutdown(ctx)
+}
+
+// subtleConstantTimeEq 常量时间字符串比较，避免 API Key 鉴权的计时侧信道
+func subtleConstantTimeEq(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

@@ -42,7 +42,7 @@ Client Response
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.23+
 - (Optional) Docker for monitoring stack
 
 ### Installation
@@ -152,8 +152,8 @@ The enhanced monitoring stack includes Loki + Promtail for log aggregation. See 
 ### Generate Demo Traffic
 
 ```bash
-# Run the test script to generate sample requests
-./test_relay.sh
+# Run the demo script to generate sample requests
+./scripts/generate-demo.sh
 
 # Or manually send requests
 for i in {1..10}; do
@@ -257,6 +257,7 @@ The relay exposes comprehensive Prometheus metrics at `/metrics` endpoint:
 | `relay_duration_ms` | Histogram | Request duration in milliseconds | `route` |
 | `relay_errors_total` | Counter | Total number of errors | `route`, `type` |
 | `relay_active_connections` | Gauge | Current number of active connections | `route` |
+| `relay_tokens_total` | Counter | Total tokens processed (extracted from streamed usage) | `route`, `direction` (input/output) |
 | `relay_storage_write_ms` | Histogram | Storage write latency in milliseconds | - |
 
 ### Histogram Buckets
@@ -284,6 +285,9 @@ rate(relay_errors_total[1m])
 
 # Active connections by route
 relay_active_connections
+
+# Token throughput (tokens per minute, by direction)
+rate(relay_tokens_total[1m]) * 60
 ```
 
 ### Grafana Dashboard
