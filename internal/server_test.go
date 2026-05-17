@@ -27,7 +27,7 @@ func newTestServer(t *testing.T, route RouteConfig, auth AuthConfig, rl RateLimi
 	}
 	proxy := NewProxy(cfg, nil, getTestMetrics())
 	limiter := NewRateLimiter(&cfg.RateLimit)
-	return NewServer(cfg, proxy, limiter)
+	return NewServer(cfg, proxy, limiter, nil)
 }
 
 // fakeSSEUpstream returns an httptest server emitting a small SSE stream.
@@ -147,19 +147,10 @@ func TestServer_HandleProxy_RouteNotFound(t *testing.T) {
 }
 
 // TestServer_HandleProxy_MaxBodySize verifies a request body larger than
-// Server.MaxBodySize returns 413.
-//
-// KNOWN PRODUCTION BUG: ServerConfig.MaxBodySize is declared and parsed from
-// config but never enforced anywhere in the request path. Neither server.go
-// (handleProxy) nor proxy.go (Handle, which does an unbounded io.ReadAll on
-// r.Body) wraps the body with http.MaxBytesReader or otherwise limits it.
-// As a result an oversized body is fully read and forwarded, returning 200
-// instead of 413. This test is skipped until a guard is added in production
-// code (e.g. r.Body = http.MaxBytesReader(w, r.Body, MaxBodySize) plus
-// mapping the resulting error to http.StatusRequestEntityTooLarge).
+// Server.MaxBodySize returns 413. handleProxy wraps the body with
+// http.MaxBytesReader and proxy.Handle maps the resulting MaxBytesError to
+// ErrRequestTooLarge, which the server reports as 413.
 func TestServer_HandleProxy_MaxBodySize(t *testing.T) {
-	t.Skip("MaxBodySize is not enforced in production code; see comment above")
-
 	upstream := fakeSSEUpstream()
 	defer upstream.Close()
 

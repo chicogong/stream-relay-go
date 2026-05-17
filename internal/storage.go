@@ -181,20 +181,23 @@ func (s *Storage) SaveLog(ctx context.Context, log *StreamLog) error {
 	return batch.Send()
 }
 
-// Ping 检查存储连接（ClickHouse 优先，未启用时返回 nil）
-func (s *Storage) Ping(ctx context.Context) error {
-	if s == nil || s.clickhouse == nil {
-		return nil
-	}
-	return s.clickhouse.Ping(ctx)
-}
-
 // Ping 检查存储依赖是否可达（供 /readyz 使用）
+// 未启用任何后端时返回 nil；已连接的后端任意一个失败则返回错误。
 func (s *Storage) Ping(ctx context.Context) error {
-	if s == nil || s.redis == nil {
+	if s == nil {
 		return nil
 	}
-	return s.redis.Ping(ctx).Err()
+	if s.redis != nil {
+		if err := s.redis.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("redis: %w", err)
+		}
+	}
+	if s.clickhouse != nil {
+		if err := s.clickhouse.Ping(ctx); err != nil {
+			return fmt.Errorf("clickhouse: %w", err)
+		}
+	}
+	return nil
 }
 
 // Close 关闭连接
