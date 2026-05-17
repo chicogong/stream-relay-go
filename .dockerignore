@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+bin/
+relay
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Logs (created fresh inside the image)
+logs/
+*.log
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vendor
+vendor/
+
+# Coverage
+coverage.txt
+coverage.html
+*.cover
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Claude Code
+.claude/
+
+# Docs and CI not needed for the build
+docs/
+.github/
+*.md
+
+# Docker / deployment configs (not needed in build context)
+Dockerfile
+.dockerignore
+deployments/
